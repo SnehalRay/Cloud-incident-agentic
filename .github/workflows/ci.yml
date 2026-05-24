@@ -35,7 +35,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake libssl-dev pkg-config build-essential
+          sudo apt-get install -y cmake libssl-dev pkg-config build-essential libcurl4-openssl-dev
 
       - uses: dtolnay/rust-toolchain@stable
 
