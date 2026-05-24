@@ -52,6 +52,72 @@ services:
       start_period: 10s
 
   # ──────────────────────────────────────────────────────────
+  # Kafka — application event queue (KRaft, no Zookeeper)
+  # item-events  → consumed by kafka-consumer
+  # item-events.DLT → DLQ fault target
+  # ──────────────────────────────────────────────────────────
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: incident-lab-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_CFG_NODE_ID: "0"
+      KAFKA_CFG_PROCESS_ROLES: "controller,broker"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "0@kafka:9093"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    ports:
+      - "9092:9092"
+    networks:
+      - incident-lab-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # Kafka Exporter — exposes consumer lag + topic offsets
+  # to Prometheus so the agent can detect DLQ overflow
+  # ──────────────────────────────────────────────────────────
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: incident-lab-kafka-exporter
+    restart: unless-stopped
+    command: ["--kafka.server=kafka:9092"]
+    ports:
+      - "9308:9308"
+    networks:
+      - incident-lab-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────
+  # Kafka Consumer — Rust service that drains item-events.
+  # CONSUMER_FAIL_RATE=0.0 by default (healthy).
+  # Fault trigger restarts it with CONSUMER_FAIL_RATE=0.9.
+  # ──────────────────────────────────────────────────────────
+  kafka-consumer:
+    build: ./services/kafka-consumer
+    container_name: incident-lab-kafka-consumer
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKERS:        kafka:9092
+      CONSUMER_FAIL_RATE:   ${CONSUMER_FAIL_RATE:-0.0}
+      MAX_RETRIES:          "3"
+    networks:
+      - incident-lab-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────
   # Redis — cache layer + rate limiter shared state
   # ──────────────────────────────────────────────────────────
   redis:
@@ -83,12 +149,13 @@ services:
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     environment:
-      DB_SHARD1_URL: ${DB_SHARD1_URL}
-      DB_SHARD2_URL: ${DB_SHARD2_URL}
-      DB_USER:       ${DB_USER}
-      DB_PASSWORD:   ${DB_PASSWORD}
-      REDIS_HOST:    ${REDIS_HOST}
-      REDIS_PORT:    ${REDIS_PORT}
+      DB_SHARD1_URL:  ${DB_SHARD1_URL}
+      DB_SHARD2_URL:  ${DB_SHARD2_URL}
+      DB_USER:        ${DB_USER}
+      DB_PASSWORD:    ${DB_PASSWORD}
+      REDIS_HOST:     ${REDIS_HOST}
+      REDIS_PORT:     ${REDIS_PORT}
+      KAFKA_BROKERS:  kafka:9092
     networks:
       - incident-lab-network
     depends_on:
