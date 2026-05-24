@@ -1,4 +1,4 @@
-FROM rust:1.81 AS build
+FROM rust:1.85 AS build
 WORKDIR /app
 COPY Cargo.toml ./
 # Build deps layer — cache before copying src
