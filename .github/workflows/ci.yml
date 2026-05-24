@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1: Spring Boot ─────────────────────────────────────
+  build-backend:
+    name: Build Spring Boot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      - name: mvn package
+        run: mvn package -DskipTests --no-transfer-progress
+        working-directory: services/backend-app/backend-spring
+
+  # ── Job 2: Rust services ───────────────────────────────────
+  build-rust:
+    name: Build Rust services
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rdkafka (kafka-consumer) compiles librdkafka from source via cmake
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake libssl-dev pkg-config build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            services/log-pipeline
+            services/worker
+            services/kafka-consumer
+
+      - name: Build log-pipeline
+        run: cargo build
+        working-directory: services/log-pipeline
+
+      - name: Build worker
+        run: cargo build
+        working-directory: services/worker
+
+      # kafka-consumer is the slowest — rdkafka cmake build takes ~5-10 min
+      # cached after first run
+      - name: Build kafka-consumer
+        run: cargo build
+        working-directory: services/kafka-consumer
+
+  # ── Job 3: C tools ─────────────────────────────────────────
+  build-c-tools:
+    name: Build C tools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build tc_fault
+        run: gcc -O2 -Wall -Wextra -o /tmp/tc_fault services/tc-fault/tc_fault.c
+
+      - name: Build mem_pressure
+        run: gcc -O2 -Wall -Wextra -o /tmp/mem_pressure services/mem-pressure/mem_pressure.c
+
+  # ── Job 4: Docker Compose build ────────────────────────────
+  # Runs only on push to main (not on every PR) — full image
+  # builds are slow, especially the rdkafka layer in kafka-consumer.
+  build-docker:
+    name: Docker Compose build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-backend, build-rust, build-c-tools]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create .env from example
+        run: cp .env.example .env
+
+      - name: docker compose build
+        run: docker compose build
+        env:
+          DOCKER_BUILDKIT: 1
