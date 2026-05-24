@@ -1,4 +1,4 @@
-FROM rust:1.85 AS build
+FROM rust:1.88 AS build
 RUN apt-get update && apt-get install -y cmake libssl-dev pkg-config build-essential
 WORKDIR /app
 COPY Cargo.toml ./
