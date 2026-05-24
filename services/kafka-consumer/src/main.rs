@@ -24,7 +24,7 @@ async fn main() {
 
     let fail_rate: f64 = std::env::var("CONSUMER_FAIL_RATE")
         .ok()
-        .and_then(|v| v.parse().ok())
+        .and_then(|v| v.parse::<f64>().ok())
         .unwrap_or(0.0)
         .clamp(0.0, 1.0);
 
@@ -64,7 +64,8 @@ async fn main() {
             Err(e) => error!(error = %e, "kafka_recv_error"),
             Ok(msg) => {
                 let payload = msg
-                    .payload_str()
+                    .payload()
+                    .and_then(|b| std::str::from_utf8(b).ok())
                     .unwrap_or("")
                     .to_string();
 
