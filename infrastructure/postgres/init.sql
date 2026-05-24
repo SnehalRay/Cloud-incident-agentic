@@ -41,11 +41,20 @@ CREATE TABLE IF NOT EXISTS items (
     created_at  TIMESTAMP DEFAULT NOW()
 );
 
--- Seed: register the four core services
+-- Audit log — written by the Rust worker for every processed job
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          SERIAL PRIMARY KEY,
+    event_type  VARCHAR(100) NOT NULL,
+    instance_id VARCHAR(100),
+    endpoint    VARCHAR(200),
+    created_at  TIMESTAMP DEFAULT NOW()
+);
+
+-- Seed: register core services
 INSERT INTO services (name, description) VALUES
     ('frontend',  'React user-facing application'),
     ('backend',   'Spring Boot core API service'),
     ('postgres',  'PostgreSQL database'),
     ('redis',     'Redis cache layer'),
-    ('worker',    'Python background job processor')
+    ('worker',    'Rust background job processor')
 ON CONFLICT (name) DO NOTHING;

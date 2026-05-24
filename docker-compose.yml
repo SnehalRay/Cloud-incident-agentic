@@ -100,6 +100,25 @@ services:
         condition: service_healthy
 
   # ──────────────────────────────────────────────────────────
+  # Worker — Rust service that drains jobs:queue from Redis
+  # and writes processed events to audit_log on shard-1
+  # ──────────────────────────────────────────────────────────
+  worker:
+    build: ./services/worker
+    container_name: incident-lab-worker
+    restart: unless-stopped
+    environment:
+      REDIS_URL:    ${REDIS_URL}
+      DATABASE_URL: ${WORKER_DATABASE_URL}
+    networks:
+      - incident-lab-network
+    depends_on:
+      postgres-shard-1:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────
   # Log Pipeline — Rust service that reads backend logs and
   # exposes derived Prometheus metrics on :9091
   # ──────────────────────────────────────────────────────────
