@@ -200,3 +200,15 @@ cloud-incident-lab/
 ## Resume Bullet
 
 > Built an agentic incident-response platform for a Kubernetes-based microservices environment using React, Spring Boot, Rust, Python, Kafka, PostgreSQL (sharded), Redis, Prometheus, Grafana, and LangGraph. Implemented a Rust log-processing pipeline that streams events through Kafka into Prometheus. Designed distributed systems failure scenarios including DLQ overflow, hot database shards, pod OOM kills, and rate limit storms. Built a tool-using AI agent to diagnose root causes across simulated production incidents.
+
+
+
+Analyze the docs as i WANT to make the main scope of the plan fixed
+you will have multiple failure points
+so from the backend things like rate limiting
+maybe a queue system which ends up having a lot of failures and goes to dead letter queue
+database is sharded but one part gets more calls than anyone
+I want a bunch of distributed systems fault happening and that can be through kubernetes and all
+all of these logs will be processed by a rust pipeline which will pass the logs through kafka and post the metrics to grafana and prometheus
+
+that is the main scope right now

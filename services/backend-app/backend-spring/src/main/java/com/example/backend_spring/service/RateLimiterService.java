@@ -25,19 +25,17 @@ public class RateLimiterService {
 
     public boolean isAllowed(String clientId){
         String key = "rate_limiter:" + clientId;
-
-        // atomically increment the request counter for this client in Redis
-        // if the key doesn't exist yet, Redis creates it at 0 and returns 1
-        Long count = redisTemplate.opsForValue().increment(key);
-
-        if (count != null && count == 1) {
-            // first request in this window — start the clock by setting an expiry
-            // after TIME_WINDOW_MS the key is deleted and the counter resets automatically
-            redisTemplate.expire(key, TIME_WINDOW_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+        try {
+            Long count = redisTemplate.opsForValue().increment(key);
+            if (count != null && count == 1) {
+                redisTemplate.expire(key, TIME_WINDOW_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+            }
+            return count != null && count <= MAX_REQUESTS;
+        } catch (Exception e) {
+            // Redis unavailable — fail open so legitimate traffic isn't blocked
+            log.warn("rate_limiter_redis_unavailable client_id={} error={} — failing open", clientId, e.getMessage());
+            return true;
         }
-
-        // allow if within the limit, block if count exceeds MAX_REQUESTS
-        return count != null && count <= MAX_REQUESTS;
     }
 
     public void pushViolationJob(String instanceId, String endpoint) {
