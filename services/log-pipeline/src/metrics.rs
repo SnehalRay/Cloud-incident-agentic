@@ -60,6 +60,13 @@ lazy_static! {
         &["shard"]
     ).unwrap();
 
+    // Docker OOM kill events — fires when any container is OOM-killed
+    pub static ref OOM_KILLS: CounterVec = register_counter_vec!(
+        "container_oom_kills_total",
+        "Number of OOM kills per container observed via Docker events API",
+        &["container"]
+    ).unwrap();
+
     // db_query_slow log entries — distinguishes network degradation from hard partition
     pub static ref DB_QUERY_SLOW: CounterVec = register_counter_vec!(
         "backend_db_query_slow_total",
@@ -86,6 +93,7 @@ pub fn init() {
     lazy_static::initialize(&SLOW_REQUESTS);
     lazy_static::initialize(&SHARD_OVERLOADS);
     lazy_static::initialize(&DB_QUERY_SLOW);
+    lazy_static::initialize(&OOM_KILLS);
     lazy_static::initialize(&CONTAINER_RESTARTS);
 }
 

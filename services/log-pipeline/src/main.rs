@@ -1,3 +1,4 @@
+mod docker_events;
 mod docker_logs;
 mod log_parser;
 mod metrics;
@@ -18,6 +19,11 @@ async fn main() {
     // Retries automatically if the container isn't up yet or restarts.
     tokio::spawn(async {
         docker_logs::stream_with_retry("incident-lab-backend").await;
+    });
+
+    // Watch Docker event stream for OOM kills on any container.
+    tokio::spawn(async {
+        docker_events::watch_oom_events().await;
     });
 
     let app = Router::new().route("/metrics", get(metrics_handler));
