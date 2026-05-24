@@ -1,11 +1,12 @@
 services:
 
   # ──────────────────────────────────────────────────────────
-  # PostgreSQL — primary database
+  # PostgreSQL Shard 1 — receives items where name.hashCode() % 2 == 0
+  # Hot partition fault targets this shard
   # ──────────────────────────────────────────────────────────
-  postgres:
+  postgres-shard-1:
     image: postgres:15-alpine
-    container_name: incident-lab-postgres
+    container_name: incident-lab-postgres-shard-1
     restart: unless-stopped
     environment:
       POSTGRES_DB:       ${POSTGRES_DB}
@@ -14,7 +15,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-shard1-data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - incident-lab-network
@@ -26,7 +27,32 @@ services:
       start_period: 10s
 
   # ──────────────────────────────────────────────────────────
-  # Redis — cache layer
+  # PostgreSQL Shard 2 — receives items where name.hashCode() % 2 == 1
+  # ──────────────────────────────────────────────────────────
+  postgres-shard-2:
+    image: postgres:15-alpine
+    container_name: incident-lab-postgres-shard-2
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-shard2-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - incident-lab-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ──────────────────────────────────────────────────────────
+  # Redis — cache layer + rate limiter shared state
   # ──────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
@@ -49,7 +75,6 @@ services:
 
   # ──────────────────────────────────────────────────────────
   # Backend — Spring Boot API
-  # Build path adjusted: project lives in backend-app/backend-spring/
   # ──────────────────────────────────────────────────────────
   backend:
     build: ./services/backend-app/backend-spring
@@ -58,7 +83,8 @@ services:
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     environment:
-      DB_URL:        ${DB_URL}
+      DB_SHARD1_URL: ${DB_SHARD1_URL}
+      DB_SHARD2_URL: ${DB_SHARD2_URL}
       DB_USER:       ${DB_USER}
       DB_PASSWORD:   ${DB_PASSWORD}
       REDIS_HOST:    ${REDIS_HOST}
@@ -66,7 +92,9 @@ services:
     networks:
       - incident-lab-network
     depends_on:
-      postgres:
+      postgres-shard-1:
+        condition: service_healthy
+      postgres-shard-2:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -89,14 +117,15 @@ services:
       - backend
 
 # ──────────────────────────────────────────────────────────
-# Named volumes — data persists across container restarts
+# Named volumes
 # ──────────────────────────────────────────────────────────
 volumes:
-  postgres-data:
+  postgres-shard1-data:
+  postgres-shard2-data:
   redis-data:
 
 # ──────────────────────────────────────────────────────────
-# Network — all services share one internal network
+# Network
 # ──────────────────────────────────────────────────────────
 networks:
   incident-lab-network:

@@ -1,139 +1,178 @@
 # Roadmap
 
-## Objectives
+## Primary Objective
 
-### Primary Objective
-Build a local cloud-simulated incident-response platform where an AI agent can diagnose production-style failures using logs, metrics, deployment history, and runbooks — and explain its reasoning with evidence.
+Build a local cloud-simulated incident-response platform where an AI agent can diagnose production-style distributed systems failures using logs, metrics, K8s events, and runbooks — and explain its reasoning with evidence.
 
-### Secondary Objectives
-- Demonstrate agentic AI design (tool use, multi-step reasoning, structured output)
-- Demonstrate observability and ops engineering knowledge
-- Demonstrate microservices and distributed systems understanding
-- Produce a portfolio project strong enough to mention in interviews
-
----
-
-## Timeline Overview
-
-| Week | Focus                         | Milestone                                      |
-|------|-------------------------------|------------------------------------------------|
-| 1    | Monitored system + incidents  | Working multi-service app with 2+ failures     |
-| 2    | Agent tools + workflow        | Agent produces real diagnoses                  |
-| 3    | Dashboard + polish            | Fully demoable, portfolio-ready                |
+### What makes this different from a basic project
+- Failures are distributed systems failures, not just "service X is down"
+- Observability is a Rust pipeline, not just log tailing
+- Infrastructure is Kubernetes, not just Docker Compose
+- Agent has K8s-aware tools (pod events, evictions, DLQ depth, shard metrics)
 
 ---
 
-## Week 1 — The System
+## Phase Overview
 
-**Goal:** Build the environment the agent will monitor.
-
-- [ ] All services running in Docker Compose
-- [ ] Services connected (backend → DB, backend → Redis, frontend → backend)
-- [ ] Health endpoints on each service
-- [ ] Prometheus metrics exposed
-- [ ] Grafana and Loki set up
-- [ ] Deployment history tracked in DB
-- [ ] At least 2 incident scenarios reproducible
-
-**Milestone:** You can trigger a Redis outage and watch Grafana show the degradation.
-
----
-
-## Week 2 — The Agent
-
-**Goal:** Build the intelligence layer.
-
-- [ ] FastAPI agent service running
-- [ ] All 5 core tools implemented and returning real data
-- [ ] LangGraph workflow with intake → plan → evidence → synthesis → recommendation
-- [ ] Ollama local model connected
-- [ ] ChromaDB with indexed runbooks
-- [ ] Agent returns structured JSON diagnosis for at least 3 scenarios
-
-**Milestone:** You ask "Why is the backend slow?" and the agent correctly identifies Redis as the root cause.
+| Phase | Focus                              | Output                                              |
+|-------|------------------------------------|-----------------------------------------------------|
+| 1     | Core services + rate limiter       | Working app with rate limiting ✓ (done)             |
+| 2     | Kafka + DLQ                        | Event queue with consumer failures and DLQ          |
+| 3     | PostgreSQL sharding + hot partition | Sharded DB with hot-partition failure scenario      |
+| 4     | Kubernetes migration               | All services running in K8s (kind)                  |
+| 5     | K8s fault scenarios                | OOM kill, eviction, crashloop triggerable           |
+| 6     | Rust log pipeline                  | Logs → Kafka → Prometheus metrics flowing           |
+| 7     | Grafana dashboards                 | All failure signals visible in dashboards           |
+| 8     | Agent tools + workflow             | Agent diagnoses all 7 scenarios correctly           |
+| 9     | Dashboard + polish                 | Fully demoable, portfolio-ready                     |
 
 ---
 
-## Week 3 — The Product
+## Phase 1 — Core Services + Rate Limiter ✓ DONE
 
-**Goal:** Make it look and feel like a real tool.
+Backend (Spring Boot), Frontend (React), PostgreSQL, Redis, Rust worker.
+Rate limiter: Redis sliding-window per instance ID, 429 on violation, violation pushed to jobs queue.
 
-- [ ] React dashboard with all panels (status, ask agent, evidence, recommendations)
+---
+
+## Phase 2 — Kafka + DLQ
+
+**Goal:** Add an event-driven pipeline with realistic consumer failure injection.
+
+- [ ] Add Kafka + Zookeeper to Docker Compose (or K8s later)
+- [ ] Backend publishes to `item-events` topic on POST /api/items
+- [ ] Python consumer service processes `item-events`
+- [ ] Consumer has configurable failure rate (env var: `FAILURE_RATE=0.3`)
+- [ ] Failed messages retry N times then go to `item-events.DLQ`
+- [ ] DLQ depth exposed as a Prometheus metric
+- [ ] Incident scenario: set FAILURE_RATE=0.9, watch DLQ fill
+
+**Milestone:** DLQ depth spikes in Prometheus when consumer failure rate is high.
+
+---
+
+## Phase 3 — PostgreSQL Sharding + Hot Partition
+
+**Goal:** Add a shard-imbalance failure scenario.
+
+- [ ] Set up 2 PostgreSQL instances: shard-1, shard-2
+- [ ] Backend routes writes based on item ID hash (even → shard-1, odd → shard-2)
+- [ ] Each shard exposes per-shard metrics (latency, connection count, CPU)
+- [ ] Load-test script that targets only shard-1 keys
+- [ ] Incident scenario: run hot-partition script, watch shard-1 metrics diverge
+- [ ] Backend returns 500s when shard-1 is overwhelmed
+
+**Milestone:** Per-shard metrics show divergence during hot-partition scenario.
+
+---
+
+## Phase 4 — Kubernetes Migration
+
+**Goal:** Move all services from Docker Compose to Kubernetes (kind).
+
+- [ ] Install kind, set up local cluster
+- [ ] Write K8s manifests for all services (Deployments, Services, ConfigMaps, Secrets)
+- [ ] Set memory limits on backend pod (needed for OOM scenario)
+- [ ] Set up PodDisruptionBudgets and priority classes for eviction scenario
+- [ ] Verify all services healthy in K8s: `kubectl get pods`
+- [ ] Keep Docker Compose for fast local iteration (K8s is primary)
+
+**Milestone:** `kubectl get pods` shows all services Running.
+
+---
+
+## Phase 5 — Kubernetes Fault Scenarios
+
+**Goal:** K8s-native failures that can be triggered on demand.
+
+- [ ] OOM kill scenario: inject memory pressure until pod hits limit → OOMKilled
+- [ ] Eviction scenario: fill node disk/memory to trigger K8s eviction
+- [ ] CrashLoop scenario: inject startup exception into backend → CrashLoopBackOff
+- [ ] Each scenario has a trigger script in `incident-scenarios/`
+- [ ] Each scenario has a reset script
+- [ ] K8s events visible in observability pipeline
+
+**Milestone:** All 3 K8s fault scenarios triggerable and resettable on demand.
+
+---
+
+## Phase 6 — Rust Log Pipeline
+
+**Goal:** Replace ad-hoc log tailing with a structured Rust pipeline that feeds metrics.
+
+- [ ] All services emit structured JSON logs (already done for backend)
+- [ ] Rust pipeline reads log output from each service (file tail or K8s log API)
+- [ ] Pipeline parses log events: severity, service, endpoint, duration, status code
+- [ ] Pipeline publishes to Kafka topic `log-events`
+- [ ] Kafka consumer reads `log-events` and increments Prometheus counters/histograms
+- [ ] Metrics: error_rate_total, request_latency_seconds, dlq_depth, shard_error_total
+
+**Milestone:** Prometheus shows metrics derived from log events in real time.
+
+---
+
+## Phase 7 — Grafana Dashboards
+
+**Goal:** Every failure scenario has a visible signal in Grafana before agent work begins.
+
+- [ ] Per-service dashboard: request rate, error rate, latency p50/p95/p99
+- [ ] Rate limiter panel: 429 rate per instance
+- [ ] Kafka panel: consumer lag, DLQ depth per topic
+- [ ] Database panel: per-shard latency, connection count, error rate
+- [ ] K8s panel: pod restart count, OOMKilled events, eviction events
+- [ ] All panels populated from Prometheus (fed by Rust log pipeline)
+
+**Milestone:** Triggering any incident scenario shows a visible signal in Grafana within 30 seconds.
+
+---
+
+## Phase 8 — Agent Tools + Workflow
+
+**Goal:** Agent can diagnose all 7 failure scenarios.
+
+- [ ] Core tools: `get_service_health`, `get_logs`, `get_metrics`, `get_recent_deployments`, `search_runbooks`
+- [ ] New tools: `check_dlq_depth`, `get_k8s_events`, `get_shard_metrics`
+- [ ] LangGraph workflow: intake → plan → evidence → synthesis → recommendation
+- [ ] Agent tested against all 7 scenarios
+- [ ] Structured JSON diagnosis for each
+
+**Milestone:** Agent correctly identifies root cause for 6/7 scenarios.
+
+---
+
+## Phase 9 — Dashboard + Polish
+
+**Goal:** Fully demoable, portfolio-ready.
+
+- [ ] React dashboard: service status, K8s pod panel, Kafka panel, ask-agent, evidence, recommendations
 - [ ] Approval modal for risky actions
-- [ ] Postmortem generation and display
-- [ ] All 5 incident scenarios covered and tested
+- [ ] Postmortem generation
 - [ ] Architecture diagram
-- [ ] Demo script written
-- [ ] Demo video recorded
+- [ ] Demo script (one incident end-to-end)
+- [ ] Demo video (2 minutes)
 
 **Milestone:** End-to-end live demo works cleanly from browser open to postmortem displayed.
 
 ---
 
-## Phase Checkpoints
-
-### After Phase 1
-You can run the app and break it.
-
-### After Phase 2
-You can observe the breakage in Grafana and Loki.
-
-### After Phase 3
-You can trigger any incident with a single script and reset it.
-
-### After Phase 4
-Tools return real data — logs from Loki, metrics from Prometheus, deploys from DB.
-
-### After Phase 5
-The agent produces a structured, evidence-based diagnosis with ranked root causes.
-
-### After Phase 6
-A user can ask a question and see the full diagnosis in the browser.
-
-### After Phase 7
-After each investigation, a postmortem report is auto-generated.
-
-### After Phase 8
-The project is demo-ready and portfolio-ready.
-
----
-
 ## MVP Definition
 
-The MVP is done when:
-
-> A user can open the dashboard, see a degraded service, ask the agent why it's failing, and receive a structured diagnosis with evidence and recommended next steps.
+> A user can open the dashboard, trigger a distributed systems failure, ask the agent why it's failing, and receive a structured diagnosis with evidence and recommended next steps.
 
 That means:
-- At least 4 services running
-- At least 4 incident scenarios
-- At least 5 agent tools working
+- All 7 incident scenarios triggerable
+- Rust log pipeline flowing into Prometheus/Grafana
+- 8 agent tools working
 - Agent produces: summary + evidence + root cause + confidence + recommendations
 - Dashboard shows the diagnosis
 
-Nothing else is required for MVP.
-
 ---
 
-## Metrics for Success
+## What Was Explicitly Removed from Old Scope
 
-| Metric                            | Target                              |
-|-----------------------------------|-------------------------------------|
-| Incident scenarios covered        | 5                                   |
-| Agent tools implemented           | 7+                                  |
-| Correct root cause diagnoses      | 4/5 scenarios diagnosed correctly   |
-| Time to diagnosis (agent runtime) | Under 60 seconds per investigation  |
-| Demo length                       | 2 minutes, clean walkthrough        |
-
----
-
-## What Not to Build (Yet)
-
-- More than 5 services
-- Kubernetes / Helm charts
-- Authentication / multi-user
-- External API dependencies
-- Real cloud infrastructure
-- Production-grade security
-
-Keep scope tight. MVP first, stretch later.
+| Old item              | Status         | Reason                            |
+|-----------------------|----------------|-----------------------------------|
+| Loki log aggregation  | Removed        | Replaced by Rust pipeline + Kafka |
+| "No Kubernetes yet"   | Reversed       | K8s is now core to the scope      |
+| Docker Compose only   | Replaced       | K8s (kind) is primary runtime     |
+| Simple worker backlog | Replaced       | Kafka DLQ is richer scenario      |

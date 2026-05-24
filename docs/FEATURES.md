@@ -1,50 +1,112 @@
 # Features
 
-## MVP Features
+## Core Scope
+
+### Infrastructure
+- All services run in Kubernetes (kind for local dev)
+- Kubernetes-native failure injection (OOM limits, eviction policies, crashloop triggers)
 
 ### Microservice System
-- 4–5 services running via Docker Compose
-- Each service has health endpoints, logs, and metrics exposed
+- Frontend (React) with per-instance rate limit identity headers
+- Backend API (Spring Boot) with Redis-backed sliding-window rate limiter
+- Kafka event queue with consumer failure injection and DLQ
+- PostgreSQL with sharding and hot-partition simulation
+- Redis for cache and shared rate-limit state
 
-### Observability
-- Prometheus metrics collection
-- Grafana dashboards per service
-- Loki log aggregation
-- Deployment history stored in DB
+### Observability Pipeline (Rust → Kafka → Prometheus → Grafana)
+- Rust log pipeline reads structured JSON logs from all services
+- Enriches and publishes log events to Kafka topic `log-events`
+- Kafka consumer parses log events into Prometheus metrics
+- Grafana dashboards: error rates, latency, queue depths, shard metrics, K8s events
 
-### Incident Scenarios (at least 4)
-- Redis outage
-- Bad deploy (wrong env var)
-- DB connection overload
-- Backend crash loop
-- Worker backlog
+### Incident Scenarios
 
-### Agent Tools
-- `get_service_health(service)` — status, restart count, last heartbeat
-- `get_logs(service, window)` — recent log lines
-- `get_metrics(service, window)` — latency, error rate, CPU, memory
+#### 1. Rate Limit Storm
+**Trigger:** Multiple frontend instances fire rapid POST requests
+- Backend returns 429 Too Many Requests
+- Violations pushed to Redis jobs queue
+- Rust worker processes violations and writes to audit_log
+- **Signal:** 429 rate in Grafana, jobs queue depth rising
+
+#### 2. Kafka DLQ Overflow
+**Trigger:** Kafka consumer injected with high failure rate
+- Messages on `item-events` fail after N retries
+- Failed messages routed to `item-events.DLQ`
+- DLQ depth metric spikes
+- **Signal:** Consumer lag, DLQ depth in Grafana
+
+#### 3. Hot Database Shard
+**Trigger:** Load-test script targets one shard exclusively
+- Shard-1 CPU and latency diverge from shard-2
+- Backend queries start timing out
+- **Signal:** Per-shard latency/error metrics diverge
+
+#### 4. Pod OOM Kill
+**Trigger:** Memory-hungry load injected, K8s OOM limit hit
+- Kubernetes kills the pod (OOMKilled exit code)
+- Service restarts, brief unavailability
+- **Signal:** OOMKilled in K8s pod events, restart count increase
+
+#### 5. Pod Eviction (Node Pressure)
+**Trigger:** Node memory/disk pressure threshold crossed
+- K8s evicts lower-priority pods
+- Service disruption across affected pods
+- **Signal:** Eviction events in K8s, health check failures
+
+#### 6. Backend Crash Loop
+**Trigger:** Runtime exception injected into backend startup
+- Pod enters CrashLoopBackOff
+- Health checks fail continuously
+- **Signal:** CrashLoopBackOff in pod status, restart count
+
+#### 7. Redis Outage
+**Trigger:** Redis pod killed
+- Rate limiter falls back or fails open
+- Cache misses spike, DB load increases
+- **Signal:** Cache hit rate drop, DB CPU spike, rate limiter errors
+
+---
+
+## Agent Tools
+
+- `get_service_health(service)` — K8s pod status, restart count, last heartbeat
+- `get_logs(service, window)` — recent log lines from Rust pipeline / log store
+- `get_metrics(service, window)` — latency, error rate, CPU, memory from Prometheus
 - `get_recent_deployments(service)` — deploy history and config changes
 - `search_runbooks(query)` — vector search over markdown runbooks
 - `get_dependencies(service)` — service dependency map
 - `get_incident_history(issue)` — similar past incidents
-- `suggest_action(context)` — safe remediation steps
+- `check_dlq_depth(topic)` — Kafka admin API: consumer lag and DLQ message count
+- `get_k8s_events(service)` — pod events: OOMKilled, Evicted, CrashLoopBackOff
+- `get_shard_metrics(shard)` — per-shard latency and error rates
 
-### Agent Workflow (LangGraph)
-- Intake node: understand question, classify incident type
+---
+
+## Agent Workflow (LangGraph)
+
+- Intake node: understand question, classify incident type, identify target service
 - Planning node: decide which tools to use and in what order
-- Evidence collection node: run tools
+- Evidence collection node: run tools, gather logs/metrics/K8s events
 - Synthesis node: combine evidence into ranked hypotheses
 - Recommendation node: generate safe next steps
 
-### Agent Output (structured)
+---
+
+## Agent Output (structured)
+
 - Incident summary
-- Evidence list (logs, metrics, deploy timing)
+- Evidence list (logs, metrics, K8s events, DLQ depth, shard metrics)
 - Likely root cause
 - Confidence level
 - Recommended next steps
 
-### Dashboard
+---
+
+## Dashboard
+
 - Service status cards (healthy / degraded / unhealthy)
+- K8s pod status panel (restart counts, evictions, OOM events)
+- Kafka queue depth panel (consumer lag, DLQ depth)
 - Ask-the-agent input
 - Evidence panel
 - Recommendation panel
@@ -55,7 +117,7 @@
 ## Stretch Features
 
 ### Human Approval Flow
-- Approval modal before any risky action executes (e.g. restart service)
+- Approval modal before any risky action executes (e.g. restart pod, scale deployment)
 - Approval/rejection stored in DB
 
 ### Incident Postmortem Generator
@@ -64,121 +126,7 @@
 - Action items
 - Exportable report
 
-### Historical Incident Browser
-- Browse past incidents
-- View full evidence and diagnosis for each
-
 ### Agent Evaluation Dashboard
 - Accuracy of diagnoses
 - Tool call count per investigation
 - Time to diagnosis
-
-### Distributed Tracing
-- Jaeger integration for request tracing across services
-
-### Authentication
-- User login/roles for dashboard access
-
-### Cloud Deployment
-- Deploy to Render / Railway / EC2 / ECS
-
----
-
-## Incident Scenarios Detail
-
-### Scenario 1: Redis Outage
-**Trigger:** `docker stop redis`
-
-What happens:
-- Backend logs: `Redis connection refused`
-- Cache hit rate drops
-- DB CPU spikes
-- Backend latency increases
-
-Agent should conclude:
-> Redis unavailable → cache misses → DB overloaded → latency spike
-
----
-
-### Scenario 2: Bad Deploy
-**Trigger:** Deploy backend with incorrect `REDIS_URL` env var
-
-What happens:
-- Backend cannot connect to Redis after deploy
-- Error logs appear immediately after deploy timestamp
-- Deploy history shows recent change
-
-Agent should conclude:
-> Config error in latest deploy caused Redis connection failure
-
----
-
-### Scenario 3: DB Connection Overload
-**Trigger:** Run heavy queries or simulate connection leak
-
-What happens:
-- DB CPU at 95%
-- Logs: `too many clients`, `query timeout`
-- Backend returns 500s
-
-Agent should conclude:
-> Database bottleneck or connection pool exhausted
-
----
-
-### Scenario 4: Backend Crash Loop
-**Trigger:** Introduce a runtime exception in backend
-
-What happens:
-- Container restart count increases
-- Health checks fail
-- Logs show exception on startup or request handling
-
-Agent should conclude:
-> Service unstable — logs reveal runtime exception as root cause
-
----
-
-### Scenario 5: Worker Backlog
-**Trigger:** Pause worker container
-
-What happens:
-- Job queue length increases
-- Worker health shows stopped/unhealthy
-- No job processing logs
-
-Agent should conclude:
-> Worker failure causing growing job backlog
-
----
-
-## Agent Output Example
-
-Given user question: *"Why is the backend slow?"*
-
-```
-Summary
--------
-Backend latency increased after the 7:42 PM deploy.
-
-Root Cause
-----------
-Redis misconfiguration in latest deploy caused cache misses,
-increased DB load, and spiked response times.
-
-Evidence
---------
-- Backend logs: Redis connection refused (starting 7:42 PM)
-- Cache hit rate: dropped from 85% → 5%
-- DB CPU: increased from 35% → 91%
-- Latency: increased from 150ms → 2500ms
-- Deploy history: backend deploy at 7:42 PM changed REDIS_URL
-
-Confidence: HIGH
-
-Recommended Actions
--------------------
-1. Verify REDIS_URL env var in latest deploy config
-2. Rollback backend deploy if issue persists
-3. Restart Redis after approval (requires confirmation)
-```

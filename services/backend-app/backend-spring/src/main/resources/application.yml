@@ -1,10 +1,6 @@
 spring:
   application:
     name: backend-spring
-  datasource:
-    url: ${DB_URL}
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
   data:
     redis:
       host: ${REDIS_HOST}
@@ -13,6 +9,23 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+
+# Two shard datasources — routed by ShardRoutingDataSource based on ShardContext
+# HikariCP binding uses jdbc-url (not url)
+app:
+  datasource:
+    shard1:
+      jdbc-url: ${DB_SHARD1_URL}
+      username: ${DB_USER}
+      password: ${DB_PASSWORD}
+      pool-name: shard1-pool
+      maximum-pool-size: 10
+    shard2:
+      jdbc-url: ${DB_SHARD2_URL}
+      username: ${DB_USER}
+      password: ${DB_PASSWORD}
+      pool-name: shard2-pool
+      maximum-pool-size: 10
 
 management:
   endpoints:
