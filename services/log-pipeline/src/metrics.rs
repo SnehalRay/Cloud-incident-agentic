@@ -60,6 +60,13 @@ lazy_static! {
         &["shard"]
     ).unwrap();
 
+    // db_query_slow log entries — distinguishes network degradation from hard partition
+    pub static ref DB_QUERY_SLOW: CounterVec = register_counter_vec!(
+        "backend_db_query_slow_total",
+        "Database queries that exceeded 500ms, labelled by shard",
+        &["shard"]
+    ).unwrap();
+
     // Incremented each time the pipeline reconnects to the backend log stream.
     // Each reconnect = container restarted. Agent uses this to detect crash loops.
     pub static ref CONTAINER_RESTARTS: IntCounter = register_int_counter!(
@@ -78,6 +85,7 @@ pub fn init() {
     lazy_static::initialize(&REDIS_UNAVAILABLE);
     lazy_static::initialize(&SLOW_REQUESTS);
     lazy_static::initialize(&SHARD_OVERLOADS);
+    lazy_static::initialize(&DB_QUERY_SLOW);
     lazy_static::initialize(&CONTAINER_RESTARTS);
 }
 

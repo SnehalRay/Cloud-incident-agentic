@@ -99,6 +99,11 @@ fn record(event: LogEvent) {
                 .with_label_values(&[&shard])
                 .inc();
         }
+        LogEvent::DbQuerySlow { shard } => {
+            metrics::DB_QUERY_SLOW
+                .with_label_values(&[&shard])
+                .inc();
+        }
         LogEvent::Ignored => {}
     }
 }

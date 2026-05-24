@@ -28,6 +28,9 @@ pub enum LogEvent {
     ShardOverload {
         shard: String,
     },
+    DbQuerySlow {
+        shard: String,
+    },
     Ignored,
 }
 
@@ -64,6 +67,10 @@ pub fn parse(line: &str) -> Option<LogEvent> {
         LogEvent::SlowRequest
     } else if msg.starts_with("overload_shard_start") {
         LogEvent::ShardOverload {
+            shard: kv(msg, "shard").unwrap_or("unknown").into(),
+        }
+    } else if msg.starts_with("db_query_slow") {
+        LogEvent::DbQuerySlow {
             shard: kv(msg, "shard").unwrap_or("unknown").into(),
         }
     } else {

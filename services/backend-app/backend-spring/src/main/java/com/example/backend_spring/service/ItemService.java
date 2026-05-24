@@ -33,7 +33,12 @@ public class ItemService {
         ShardContext.set(shard);
         try {
             item.setCreatedAt(LocalDateTime.now());
+            long start = System.currentTimeMillis();
             Item saved = itemRepository.save(item);
+            long elapsed = System.currentTimeMillis() - start;
+            if (elapsed > 500) {
+                log.warn("db_query_slow shard={} elapsed_ms={}", shard, elapsed);
+            }
             log.info("item_created id={} name={} shard={} cache=invalidated", saved.getId(), saved.getName(), shard);
             return saved;
         } catch (DataAccessException e) {
