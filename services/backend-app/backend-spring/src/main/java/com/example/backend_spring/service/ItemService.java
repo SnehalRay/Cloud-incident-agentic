@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -35,6 +36,9 @@ public class ItemService {
             Item saved = itemRepository.save(item);
             log.info("item_created id={} name={} shard={} cache=invalidated", saved.getId(), saved.getName(), shard);
             return saved;
+        } catch (DataAccessException e) {
+            log.error("db_write_failed shard={} name={} error={}", shard, item.getName(), e.getMessage());
+            throw e;
         } finally {
             ShardContext.clear();
         }

@@ -100,6 +100,57 @@ services:
         condition: service_healthy
 
   # ──────────────────────────────────────────────────────────
+  # Log Pipeline — Rust service that reads backend logs and
+  # exposes derived Prometheus metrics on :9091
+  # ──────────────────────────────────────────────────────────
+  log-pipeline:
+    build: ./services/log-pipeline
+    container_name: incident-lab-log-pipeline
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "9091:9091"
+    networks:
+      - incident-lab-network
+    depends_on:
+      - backend
+
+  # ──────────────────────────────────────────────────────────
+  # Prometheus — scrapes log-pipeline metrics every 10s
+  # ──────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: incident-lab-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - incident-lab-network
+    depends_on:
+      - log-pipeline
+
+  # ──────────────────────────────────────────────────────────
+  # Grafana — dashboards over Prometheus, Prometheus auto-wired
+  # ──────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: incident-lab-grafana
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - incident-lab-network
+    depends_on:
+      - prometheus
+
+  # ──────────────────────────────────────────────────────────
   # Frontend — React app served via nginx
   # ──────────────────────────────────────────────────────────
   frontend:
@@ -123,6 +174,8 @@ volumes:
   postgres-shard1-data:
   postgres-shard2-data:
   redis-data:
+  prometheus-data:
+  grafana-data:
 
 # ──────────────────────────────────────────────────────────
 # Network

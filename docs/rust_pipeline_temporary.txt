@@ -1,0 +1,11 @@
+The Rust pipeline reads those lines, parses the message field for key=value pairs, and increments Prometheus counters. Here's the plan before I write it:
+
+
+bollard (Docker socket)
+    → stream logs from incident-lab-backend
+    → parse JSON line → extract message
+    → match message prefix → LogEvent
+    → increment prometheus counter/histogram
+    → axum exposes /metrics on :9091
+    → Prometheus scrapes it
+    → Grafana reads Prometheus
