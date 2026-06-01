@@ -1,0 +1,282 @@
+{
+  "uid": "incident-lab-main",
+  "title": "Cloud Incident Lab",
+  "tags": ["incident-lab"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "row",
+      "title": "HTTP Traffic",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "title": "Requests / sec",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 1, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(backend_http_requests_total[1m]))",
+          "legendFormat": "status {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "P95 Request Duration (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 1, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (endpoint, le) (rate(backend_http_request_duration_ms_bucket[1m])))",
+          "legendFormat": "p95 {{endpoint}}"
+        }
+      ]
+    },
+
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Fault Signals",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 11,
+      "title": "Rate Limit Violations / sec",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 9, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "fixedColor": "orange", "mode": "fixed" }, "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(backend_rate_limit_violations_total[1m]))",
+          "legendFormat": "violations/s"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Slow Requests / sec",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 9, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "fixedColor": "yellow", "mode": "fixed" }, "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "rate(backend_slow_requests_total[1m])",
+          "legendFormat": "slow requests/s"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Container Restarts (total)",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 9, "w": 4, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "targets": [
+        {
+          "expr": "backend_container_restarts_total",
+          "legendFormat": "restarts"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "OOM Kills (total)",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 9, "w": 4, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "targets": [
+        {
+          "expr": "sum(container_oom_kills_total)",
+          "legendFormat": "OOM kills"
+        }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Database",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 21,
+      "title": "DB Write Failures / sec (by shard)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 17, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "fixedColor": "red", "mode": "fixed" }, "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (shard) (rate(backend_db_write_failures_total[1m]))",
+          "legendFormat": "shard {{shard}}"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "title": "DB Slow Queries / sec (by shard)",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 17, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "fixedColor": "yellow", "mode": "fixed" }, "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (shard) (rate(backend_db_query_slow_total[1m]))",
+          "legendFormat": "shard {{shard}}"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "title": "Shard Overload Events / sec",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 17, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "fixedColor": "red", "mode": "fixed" }, "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (shard) (rate(backend_shard_overload_events_total[1m]))",
+          "legendFormat": "shard {{shard}}"
+        }
+      ]
+    },
+
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Redis",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 31,
+      "title": "Redis Unavailable / sec",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 25, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "fixedColor": "red", "mode": "fixed" }, "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "rate(backend_redis_unavailable_total[1m])",
+          "legendFormat": "redis unavailable/s"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "title": "Cache Errors / sec (by operation)",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 25, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation) (rate(backend_cache_errors_total[1m]))",
+          "legendFormat": "{{operation}}"
+        }
+      ]
+    },
+
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Kafka / DLQ",
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 41,
+      "title": "Consumer Group Lag",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 33, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "fixedColor": "orange", "mode": "fixed" }, "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (consumergroup, topic) (kafka_consumergroup_lag)",
+          "legendFormat": "{{consumergroup}} / {{topic}}"
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "title": "DLT Offset (item-events.DLT)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 33, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "fixedColor": "red", "mode": "fixed" }, "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "kafka_topic_partition_current_offset{topic=\"item-events.DLT\"}",
+          "legendFormat": "DLT offset partition {{partition}}"
+        }
+      ]
+    }
+
+  ]
+}

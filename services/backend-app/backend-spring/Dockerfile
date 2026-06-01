@@ -2,7 +2,7 @@ FROM eclipse-temurin:21-jdk-alpine AS build
 RUN apk add --no-cache maven
 WORKDIR /app
 COPY . .
-RUN mvn package -DskipTests --no-transfer-progress
+RUN mvn clean package -DskipTests --no-transfer-progress
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
