@@ -1,5 +1,8 @@
 # Cloud-incident-lab
 
+<img width="1236" height="775" alt="Screenshot 2026-06-26 at 14 41 47" src="https://github.com/user-attachments/assets/aa540dd4-defd-4b54-8aac-ff1a4828d2d7" />
+
+
 ## Setup
 
 ```bash
