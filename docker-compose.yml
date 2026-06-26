@@ -253,6 +253,42 @@ services:
     depends_on:
       - backend
 
+  # ──────────────────────────────────────────────────────────
+  # Ollama — local open-source LLM server for the diagnosis agent
+  # Behind the "agent" profile so it doesn't start with the core stack.
+  # Pull the model once: docker compose exec ollama ollama pull qwen2.5:14b-instruct
+  # ──────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: incident-lab-ollama
+    restart: unless-stopped
+    profiles: ["agent"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - incident-lab-network
+
+  # ──────────────────────────────────────────────────────────
+  # Agent — LangGraph + Qwen2.5 diagnosis agent (run on demand)
+  # Run a diagnosis: docker compose --profile agent run --rm agent
+  # ──────────────────────────────────────────────────────────
+  agent:
+    build:
+      context: ./services/agent
+    container_name: incident-lab-agent
+    profiles: ["agent"]
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      OLLAMA_BASE_URL: http://ollama:11434
+      AGENT_MODEL: ${AGENT_MODEL:-qwen2.5:14b-instruct}
+    networks:
+      - incident-lab-network
+    depends_on:
+      - prometheus
+      - ollama
+
 # ──────────────────────────────────────────────────────────
 # Named volumes
 # ──────────────────────────────────────────────────────────
@@ -262,6 +298,7 @@ volumes:
   redis-data:
   prometheus-data:
   grafana-data:
+  ollama-data:
 
 # ──────────────────────────────────────────────────────────
 # Network
