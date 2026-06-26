@@ -226,6 +226,13 @@ services:
     image: grafana/grafana:latest
     container_name: incident-lab-grafana
     restart: unless-stopped
+    environment:
+      # Allow the mission-control UI to embed dashboards in an iframe without a
+      # login. Anonymous access is read-only (Viewer) and the port is local-only.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_USERS_DEFAULT_THEME: "dark"
     volumes:
       - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana

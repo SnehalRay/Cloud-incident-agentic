@@ -6,6 +6,9 @@
 .PHONY: up down destroy reset nuke logs ps \
         ping-redis psql \
         start-infra start-spring start-frontend \
+        traffic traffic-stop traffic-status \
+        agent-up agent \
+        mission-control \
         help
 
 # ── Default target ────────────────────────────────────────────
@@ -28,6 +31,15 @@ help:
 	@echo "  make start-infra    Start only Postgres + Redis (for local Spring dev)"
 	@echo "  make start-spring   Run Spring Boot locally against Docker infra"
 	@echo "  make start-frontend Run the React frontend dev server (localhost:5173)"
+	@echo ""
+	@echo "  make traffic        Start sustained background traffic (runs until stopped)"
+	@echo "  make traffic-status Show how many traffic workers are alive"
+	@echo "  make traffic-stop   Stop the background traffic"
+	@echo ""
+	@echo "  make agent-up       Start Ollama and pull the diagnosis model (one-time)"
+	@echo "  make agent          Run the diagnosis agent against the live metrics"
+	@echo ""
+	@echo "  make mission-control  Launch the cyborg control-panel UI (localhost:5174)"
 	@echo ""
 
 # ── Start ─────────────────────────────────────────────────────
@@ -108,3 +120,33 @@ ping-redis:
 
 psql:
 	docker exec -it incident-lab-postgres psql -U $${POSTGRES_USER:-incidentuser} -d $${POSTGRES_DB:-incidentlab}
+
+# ── Sustained traffic ─────────────────────────────────────────
+# Background load generator. Runs until 'make traffic-stop'. Raise volume with
+# CONCURRENCY, e.g. CONCURRENCY=100 make traffic.
+traffic:
+	bash scripts/traffic.sh start
+
+traffic-status:
+	bash scripts/traffic.sh status
+
+traffic-stop:
+	bash scripts/traffic.sh stop
+
+# ── Diagnosis agent ───────────────────────────────────────────
+# agent-up: start Ollama and pull the model (one-time, ~9GB).
+# agent:    run a diagnosis against the currently-live metrics.
+agent-up:
+	docker compose --profile agent up -d ollama
+	docker compose exec ollama ollama pull $${AGENT_MODEL:-qwen2.5:14b-instruct}
+
+agent:
+	docker compose --profile agent run --rm agent
+
+# ── Mission Control UI ────────────────────────────────────────
+# Cyborg control panel: service rail, embedded Grafana, fault injection,
+# traffic control, and the live AI diagnosis agent. Runs a local Vite dev
+# server + a control-plane API (which shells out to the existing scripts/docker).
+# Open http://localhost:5174 once it's up.
+mission-control:
+	cd services/mission-control && (test -d node_modules || npm install) && npm run dev

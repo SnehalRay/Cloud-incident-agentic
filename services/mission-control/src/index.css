@@ -1,0 +1,249 @@
+@import 'tailwindcss';
+
+/* ── Design tokens (ui-ux-pro-max · Cyberpunk HUD / Sci-Fi FUI) ────────── */
+@theme {
+  --color-bg: #0a0a0f;
+  --color-void: #06060a;
+  --color-card: #12121a;
+  --color-panel: #0e0e16;
+  --color-muted: #1c1c2e;
+  --color-fg: #e0e0e0;
+  --color-dim: #8a8aa0;
+  --color-accent: #00ff88;
+  --color-info: #00d4ff;
+  --color-active: #ff00ff;
+  --color-danger: #ff3366;
+  --color-warn: #ffcc00;
+  --color-edge: #2a2a3a;
+
+  --font-display: 'Orbitron', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Ambient radial wash so the void has depth, not flat black. */
+#root {
+  background:
+    radial-gradient(1200px 600px at 70% -10%, rgba(0, 212, 255, 0.06), transparent 60%),
+    radial-gradient(900px 500px at 10% 110%, rgba(0, 255, 136, 0.05), transparent 60%),
+    var(--color-bg);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-void);
+}
+::-webkit-scrollbar-thumb {
+  background: #23233a;
+  border: 1px solid var(--color-edge);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2e2e4a;
+}
+
+/* ── HUD primitives ───────────────────────────────────────────────────── */
+
+/* Chamfered (45°) corners — the signature cyberpunk panel shape. */
+.chamfer {
+  clip-path: polygon(
+    10px 0,
+    100% 0,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    0 100%,
+    0 10px
+  );
+}
+.chamfer-sm {
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+/* Decorative corner brackets drawn around a relatively-positioned element. */
+.brackets::before,
+.brackets::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--color-info);
+  pointer-events: none;
+  opacity: 0.7;
+}
+.brackets::before {
+  top: 4px;
+  left: 4px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+.brackets::after {
+  bottom: 4px;
+  right: 4px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+}
+
+/* Neon glows. */
+.glow-accent {
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.35), inset 0 0 1px rgba(0, 255, 136, 0.4);
+}
+.glow-info {
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.35), inset 0 0 1px rgba(0, 212, 255, 0.4);
+}
+.glow-active {
+  box-shadow: 0 0 16px rgba(255, 0, 255, 0.5), inset 0 0 1px rgba(255, 0, 255, 0.5);
+}
+.glow-danger {
+  box-shadow: 0 0 14px rgba(255, 51, 102, 0.45), inset 0 0 1px rgba(255, 51, 102, 0.5);
+}
+.text-glow {
+  text-shadow: 0 0 8px currentColor;
+}
+
+.title {
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* ── Effects ──────────────────────────────────────────────────────────── */
+
+/* Full-screen scanline + vignette overlay. */
+.scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.18) 3px,
+    rgba(0, 0, 0, 0) 4px
+  );
+  mix-blend-mode: multiply;
+  animation: crt-flicker 6s infinite steps(60);
+}
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 120% at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+@keyframes crt-flicker {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  47% {
+    opacity: 0.5;
+  }
+  48% {
+    opacity: 0.7;
+  }
+  49% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+.pulse {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes glitch {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-1px, 1px);
+  }
+  40% {
+    transform: translate(1px, -1px);
+  }
+  60% {
+    transform: translate(-1px, 0);
+  }
+  80% {
+    transform: translate(1px, 1px);
+  }
+}
+.glitch {
+  animation: glitch 0.35s steps(2) infinite;
+}
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+.scan-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.12), transparent);
+  animation: sweep 2.4s linear infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanlines,
+  .pulse,
+  .glitch,
+  .scan-sweep::after {
+    animation: none;
+  }
+}
+
+/* Cursor blink for the agent console. */
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.caret::after {
+  content: '▋';
+  margin-left: 2px;
+  animation: blink 1s steps(1) infinite;
+  color: var(--color-accent);
+}
