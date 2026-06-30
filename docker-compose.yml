@@ -142,12 +142,13 @@ services:
   # ──────────────────────────────────────────────────────────
   # Backend — Spring Boot API
   # ──────────────────────────────────────────────────────────
-  backend:
+  # Backend node 1 — keeps the original container name so the log-pipeline
+  # (which tails incident-lab-backend) and every existing log-derived fault keep
+  # working unchanged. No host port: the load balancer owns :8080.
+  backend-1:
     build: ./services/backend-app/backend-spring
     container_name: incident-lab-backend
     restart: unless-stopped
-    ports:
-      - "${BACKEND_PORT:-8080}:8080"
     environment:
       DB_SHARD1_URL:  ${DB_SHARD1_URL}
       DB_SHARD2_URL:  ${DB_SHARD2_URL}
@@ -156,6 +157,7 @@ services:
       REDIS_HOST:     ${REDIS_HOST}
       REDIS_PORT:     ${REDIS_PORT}
       KAFKA_BROKERS:  kafka:9092
+      NODE_ID:        backend-1
     networks:
       - incident-lab-network
     depends_on:
@@ -165,6 +167,49 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # Backend node 2 — identical service, second replica behind the LB.
+  backend-2:
+    build: ./services/backend-app/backend-spring
+    container_name: incident-lab-backend-2
+    restart: unless-stopped
+    environment:
+      DB_SHARD1_URL:  ${DB_SHARD1_URL}
+      DB_SHARD2_URL:  ${DB_SHARD2_URL}
+      DB_USER:        ${DB_USER}
+      DB_PASSWORD:    ${DB_PASSWORD}
+      REDIS_HOST:     ${REDIS_HOST}
+      REDIS_PORT:     ${REDIS_PORT}
+      KAFKA_BROKERS:  kafka:9092
+      NODE_ID:        backend-2
+    networks:
+      - incident-lab-network
+    depends_on:
+      postgres-shard-1:
+        condition: service_healthy
+      postgres-shard-2:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Load Balancer — Rust reverse proxy doing health-checked round-robin across
+  # backend-1 and backend-2. Owns the host :8080 and exposes its own metrics on
+  # :9095 (scraped by Prometheus). Stopping this container is the lb-failure-fault.
+  lb:
+    build: ./services/lb
+    container_name: incident-lab-lb
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+      - "9095:9095"
+    environment:
+      BACKEND_NODES: backend-1:8080,backend-2:8080
+      HEALTH_PATH:   /actuator/health
+    networks:
+      - incident-lab-network
+    depends_on:
+      - backend-1
+      - backend-2
 
   # ──────────────────────────────────────────────────────────
   # Worker — Rust service that drains jobs:queue from Redis
@@ -200,7 +245,7 @@ services:
     networks:
       - incident-lab-network
     depends_on:
-      - backend
+      - backend-1
 
   # ──────────────────────────────────────────────────────────
   # Prometheus — scrapes log-pipeline metrics every 10s
@@ -258,7 +303,7 @@ services:
     networks:
       - incident-lab-network
     depends_on:
-      - backend
+      - lb
 
   # ──────────────────────────────────────────────────────────
   # Ollama — local open-source LLM server for the diagnosis agent

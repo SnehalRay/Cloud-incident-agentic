@@ -10,3 +10,15 @@ scrape_configs:
   - job_name: kafka
     static_configs:
       - targets: ['kafka-exporter:9308']
+
+  - job_name: lb
+    static_configs:
+      - targets: ['lb:9095']
+
+  # Scrape each backend node directly (not via the LB), so up{job="backend"}
+  # stays a true health signal even when the load balancer is down. This is what
+  # lets the agent tell "LB failed" apart from "backends dead".
+  - job_name: backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['backend-1:8080', 'backend-2:8080']

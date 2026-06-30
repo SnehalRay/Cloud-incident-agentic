@@ -44,6 +44,19 @@ From kafka-exporter:
 - kafka_consumergroup_lag{consumergroup,topic} — unconsumed messages behind the consumer
 - kafka_topic_partition_current_offset{topic} — latest offset per topic
 
+From the load balancer that sits in front of the two backend nodes (backend-1,
+backend-2) and routes all client traffic to them:
+- lb_requests_total{upstream,status} — requests the LB routed to each node
+- lb_upstream_up{upstream} (gauge) — the LB's health-check view of each node (1 up, 0 down)
+- lb_upstream_failures_total{upstream} — forward attempts that failed to reach a node
+- lb_no_healthy_upstreams_total — requests the LB rejected because no node was healthy
+
+Prometheus also records up{job} for every scrape target it polls — including
+the `lb` job and the `backend` job (one series per node). up=1 means that target
+is currently scrapeable, up=0 means it is not. The backend job scrapes each node
+DIRECTLY, not through the load balancer, so up{job="backend"} stays a true
+liveness signal for the nodes even if the load balancer itself is gone.
+
 ## How this system can fail
 
 The system can fail in several ways. They are described here by what goes WRONG,
@@ -59,6 +72,8 @@ must do:
 - database queries still succeeding but crawling
 - message processing failing so messages pile up in the dead-letter topic
 - a process being killed for exceeding its memory limit
+- the load balancer in front of the backend nodes failing, so healthy nodes stop
+  receiving traffic and clients are cut off even though the backends are fine
 
 Crucially, several of these produce OVERLAPPING symptoms (e.g. "writes failing"
 and "queries crawling" both implicate the database; "repeated restarts" and
